@@ -718,9 +718,11 @@ macro(build_arrow)
     set(ARROW_ACERO_STATIC_LIB
         "${ARROW_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}arrow_acero${CMAKE_STATIC_LIBRARY_SUFFIX}"
     )
-    set(ARROW_BUNDLED_DEP_STATIC_LIB
-        "${ARROW_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}arrow_bundled_dependencies${CMAKE_STATIC_LIBRARY_SUFFIX}"
-    )
+    if(PAIMON_ARROW_BUILD_VERSION VERSION_LESS "16.0.0")
+        set(ARROW_BUNDLED_DEP_STATIC_LIB
+            "${ARROW_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}arrow_bundled_dependencies${CMAKE_STATIC_LIBRARY_SUFFIX}"
+        )
+    endif()
     set(PARQUET_STATIC_LIB
         "${ARROW_PREFIX}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}parquet${CMAKE_STATIC_LIBRARY_SUFFIX}"
     )
@@ -750,7 +752,7 @@ macro(build_arrow)
         -DARROW_WITH_LZ4=ON
         -DARROW_WITH_ZSTD=ON
         -DARROW_WITH_BZ2=OFF
-        -DARROW_WITH_BROTLI=ON
+        -DARROW_WITH_BROTLI=OFF
         -DZSTD_ROOT=${ARROW_ZSTD_ROOT}
         -DZLIB_ROOT=${ARROW_ZLIB_ROOT}
         -DSnappy_ROOT=${ARROW_SNAPPY_ROOT}
@@ -767,7 +769,6 @@ macro(build_arrow)
                         GIT_SUBMODULES "" GIT_SUBMODULES_RECURSE FALSE ${ARROW_CONFIGURE}
                         UPDATE_DISCONNECTED 1
                         BUILD_BYPRODUCTS "${ARROW_STATIC_LIB}"
-                                         "${ARROW_BUNDLED_DEP_STATIC_LIB}"
                                          "${PARQUET_STATIC_LIB}"
                                          "${ARROW_DATASET_STATIC_LIB}"
                                          "${ARROW_ACERO_STATIC_LIB}"
@@ -803,17 +804,8 @@ macro(build_arrow)
                                      INTERFACE_LINK_DIRECTORIES
                                      "${ARROW_BUILD_DIR}/${CMAKE_BUILD_TYPE_LOWER}")
 
-    add_library(arrow_bundled_dependencies STATIC IMPORTED)
-    set_target_properties(arrow_bundled_dependencies
-                          PROPERTIES IMPORTED_LOCATION
-                                     "${ARROW_PREFIX}/lib/libarrow_bundled_dependencies.a"
-                                     INTERFACE_INCLUDE_DIRECTORIES "${ARROW_INCLUDE_DIR}"
-                                     INTERFACE_LINK_DIRECTORIES
-                                     "${ARROW_BUILD_DIR}/${CMAKE_BUILD_TYPE_LOWER}")
-
     add_dependencies(arrow arrow_ep)
     add_dependencies(parquet arrow_ep)
-    add_dependencies(arrow_bundled_dependencies arrow_ep)
     add_dependencies(arrow_dataset arrow_ep)
     add_dependencies(arrow_acero arrow_ep)
 
@@ -825,16 +817,27 @@ macro(build_arrow)
                           INTERFACE zstd
                                     snappy
                                     lz4
-                                    zlib
-                                    arrow_bundled_dependencies)
+                                    zlib)
 
     target_link_libraries(parquet
                           INTERFACE zstd
                                     snappy
                                     lz4
                                     zlib
-                                    arrow_bundled_dependencies
                                     arrow_dataset)
+
+    if(PAIMON_ARROW_BUILD_VERSION VERSION_LESS "16.0.0")
+        add_library(arrow_bundled_dependencies STATIC IMPORTED)
+        set_target_properties(arrow_bundled_dependencies
+                              PROPERTIES IMPORTED_LOCATION
+                                         "${ARROW_PREFIX}/lib/libarrow_bundled_dependencies.a"
+                                         INTERFACE_INCLUDE_DIRECTORIES "${ARROW_INCLUDE_DIR}"
+                                         INTERFACE_LINK_DIRECTORIES
+                                         "${ARROW_BUILD_DIR}/${CMAKE_BUILD_TYPE_LOWER}")
+        add_dependencies(arrow_bundled_dependencies arrow_ep)
+        target_link_libraries(arrow INTERFACE arrow_bundled_dependencies)
+        target_link_libraries(parquet INTERFACE arrow_bundled_dependencies)
+    endif()
 
 endmacro(build_arrow)
 
@@ -974,6 +977,7 @@ macro(build_glog)
         -DCMAKE_INSTALL_PREFIX=${GLOG_PREFIX}
         -DWITH_GFLAGS=OFF
         -DWITH_GTEST=OFF
+        -DWITH_UNWIND=OFF
         -DCMAKE_CXX_FLAGS=${GLOG_CMAKE_CXX_FLAGS}
         -DCMAKE_C_FLAGS=${GLOG_CMAKE_C_FLAGS})
 

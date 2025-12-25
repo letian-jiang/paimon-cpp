@@ -35,6 +35,7 @@ add_paimon_lib(paimon_parquet_file_format
                STATIC_LINK_LIBS
                parquet
                arrow
+               thrift
                glog
                fmt
                dl
